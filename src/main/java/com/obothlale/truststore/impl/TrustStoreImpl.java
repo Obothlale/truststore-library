@@ -31,9 +31,9 @@ public class TrustStoreImpl implements TrustStore {
     }
 
     public void create(String trustStoreFilePath) {
+        loadTrustStore(null);
         try {
-            loadTrustStore(null);
-            saveTrustStore(trustStoreFilePath);
+            saveToTrustStore(trustStoreFilePath);
         } catch (Exception exception) {
             throw new RuntimeException("Could not create truststore", exception);
         }
@@ -41,13 +41,13 @@ public class TrustStoreImpl implements TrustStore {
 
     private void loadTrustStore(String trustStoreFilePath) {
         try {
-            if (trustStoreFilePath == null) {
-                this.keyStore.load(null, PASSWORD.toCharArray());
+            if (trustStoreFilePath != null) {
+                FileInputStream trustStoreFileStream = new FileInputStream(trustStoreFilePath);
+                this.keyStore.load(trustStoreFileStream, PASSWORD.toCharArray());
+                trustStoreFileStream.close();
                 return;
             }
-            FileInputStream trustStoreFileStream = new FileInputStream(trustStoreFilePath);
-            this.keyStore.load(trustStoreFileStream, PASSWORD.toCharArray());
-            trustStoreFileStream.close();
+            this.keyStore.load(null, PASSWORD.toCharArray());
         } catch (Exception exception) {
             throw new RuntimeException("Unable to load truststore", exception);
         }
@@ -56,15 +56,15 @@ public class TrustStoreImpl implements TrustStore {
     public void save(String certificateFilePath, String certificateAlias, String trustStoreFilePath) {
         loadTrustStore(trustStoreFilePath);
         try {
-            Certificate certificate = getCertificateInstance(certificateFilePath);
+            Certificate certificate = getCertificate(certificateFilePath);
             this.keyStore.setCertificateEntry(certificateAlias, certificate);
-            saveTrustStore(trustStoreFilePath);
+            saveToTrustStore(trustStoreFilePath);
         } catch (Exception exception) {
             throw new RuntimeException("Could not create truststore", exception);
         }
     }
 
-    private void saveTrustStore(String trustStoreFilePath) throws KeyStoreException, IOException, NoSuchAlgorithmException, CertificateException {
+    private void saveToTrustStore(String trustStoreFilePath) throws KeyStoreException, IOException, NoSuchAlgorithmException, CertificateException {
         FileOutputStream trustStoreOutputStream = new FileOutputStream(trustStoreFilePath);
         this.keyStore.store(trustStoreOutputStream, PASSWORD.toCharArray());
         trustStoreOutputStream.close();
@@ -80,17 +80,20 @@ public class TrustStoreImpl implements TrustStore {
             }
             return certificates;
         } catch (Exception exception) {
-            throw new RuntimeException("could not get all certificates", exception);
+            throw new RuntimeException("Could not get all certificates", exception);
         }
     }
 
 
-    private Certificate getCertificateInstance(String certificateFilePath) {
+    private Certificate getCertificate(String certificateFilePath) {
         try {
             CertificateFactory certificateFactory = CertificateFactory.getInstance("X.509");
-            return certificateFactory.generateCertificate(new FileInputStream(certificateFilePath));
+            FileInputStream certificateFileInputStream = new FileInputStream(certificateFilePath);
+            Certificate certificate = certificateFactory.generateCertificate(certificateFileInputStream);
+            certificateFileInputStream.close();
+            return certificate;
         } catch (Exception exception) {
-            throw new RuntimeException("Unable to get certificate instance", exception);
+            throw new RuntimeException("Unable to get certificate", exception);
         }
     }
 }
