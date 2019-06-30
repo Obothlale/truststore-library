@@ -2,10 +2,14 @@ package com.obothlale.truststore.impl;
 
 import com.obothlale.truststore.TrustStore;
 
-import java.io.*;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
+import java.security.NoSuchAlgorithmException;
 import java.security.cert.Certificate;
+import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
 import java.util.ArrayList;
 import java.util.Enumeration;
@@ -13,54 +17,66 @@ import java.util.List;
 
 public class TrustStoreImpl implements TrustStore {
 
+    private static String KEY_STORE_TYPE = "PKCS12";
     private static String PASSWORD = "changeit";
 
     private KeyStore keyStore;
 
     public TrustStoreImpl() {
         try {
-            keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
+            this.keyStore = KeyStore.getInstance(KEY_STORE_TYPE);
         } catch (KeyStoreException exception) {
             throw new RuntimeException("Could not get an instance of KeyStore", exception);
         }
     }
 
-    public void create(String fileName) {
+    public void create(String trustStoreFilePath) {
         try {
-            char[] password = PASSWORD.toCharArray();
-            keyStore.load(null, password);
-            FileOutputStream fileOutputStream = new FileOutputStream("src/main/resources/truststore.jks");
-            keyStore.store(fileOutputStream, password);
-            fileOutputStream.close();
+            loadTrustStore(null);
+            saveTrustStore(trustStoreFilePath);
         } catch (Exception exception) {
             throw new RuntimeException("Could not create truststore", exception);
         }
     }
 
-    public void save() {
+    private void loadTrustStore(String trustStoreFilePath) {
         try {
-            char[] password = PASSWORD.toCharArray();
-            keyStore.load(new FileInputStream("src/main/resources/truststore.jks"), password);
-            File certificateFile = new File(getClass().getClassLoader().getResource("BAGL Root CA 2.cer").getFile());
-            Certificate certificate = getCertificateInstance(certificateFile.getName());
-            keyStore.setCertificateEntry("bag_root", certificate);
+            if (trustStoreFilePath == null) {
+                this.keyStore.load(null, PASSWORD.toCharArray());
+                return;
+            }
+            FileInputStream trustStoreFileStream = new FileInputStream(trustStoreFilePath);
+            this.keyStore.load(trustStoreFileStream, PASSWORD.toCharArray());
+            trustStoreFileStream.close();
+        } catch (Exception exception) {
+            throw new RuntimeException("Unable to load truststore", exception);
+        }
+    }
 
-            FileOutputStream fileOutputStream = new FileOutputStream("src/main/resources/truststore.jks");
-            keyStore.store(fileOutputStream, password);
+    public void save(String certificateFilePath, String certificateAlias, String trustStoreFilePath) {
+        loadTrustStore(trustStoreFilePath);
+        try {
+            Certificate certificate = getCertificateInstance(certificateFilePath);
+            this.keyStore.setCertificateEntry(certificateAlias, certificate);
+            saveTrustStore(trustStoreFilePath);
         } catch (Exception exception) {
             throw new RuntimeException("Could not create truststore", exception);
         }
     }
 
-    public List<Certificate> getAllCertificates() {
+    private void saveTrustStore(String trustStoreFilePath) throws KeyStoreException, IOException, NoSuchAlgorithmException, CertificateException {
+        FileOutputStream trustStoreOutputStream = new FileOutputStream(trustStoreFilePath);
+        this.keyStore.store(trustStoreOutputStream, PASSWORD.toCharArray());
+        trustStoreOutputStream.close();
+    }
+
+    public List<Certificate> getAllCertificates(String trustStoreFilePath) {
+        loadTrustStore(trustStoreFilePath);
         try {
-            keyStore.load(new FileInputStream("src/main/resources/truststore.jks"), "changeit".toCharArray());
-            Enumeration<String> aliases = keyStore.aliases();
             List<Certificate> certificates = new ArrayList<Certificate>();
+            Enumeration<String> aliases = this.keyStore.aliases();
             while (aliases.hasMoreElements()) {
-                Certificate certificate = keyStore.getCertificate(aliases.nextElement());
-                System.out.println(certificate);
-                certificates.add(certificate);
+                certificates.add(this.keyStore.getCertificate(aliases.nextElement()));
             }
             return certificates;
         } catch (Exception exception) {
@@ -68,30 +84,13 @@ public class TrustStoreImpl implements TrustStore {
         }
     }
 
-    private Certificate getCertificateInstance(String fileName) {
+
+    private Certificate getCertificateInstance(String certificateFilePath) {
         try {
             CertificateFactory certificateFactory = CertificateFactory.getInstance("X.509");
-            InputStream certstream = fullStream(fileName);
-            Certificate certificate = certificateFactory.generateCertificate(certstream);
-            return certificate;
+            return certificateFactory.generateCertificate(new FileInputStream(certificateFilePath));
         } catch (Exception exception) {
             throw new RuntimeException("Unable to get certificate instance", exception);
         }
     }
-
-    private static InputStream fullStream(String fname) {
-        try {
-            FileInputStream fis = new FileInputStream("src/main/resources/BAGL Root CA 2.cer");
-            DataInputStream dis = new DataInputStream(fis);
-            byte[] bytes = new byte[dis.available()];
-            dis.readFully(bytes);
-            ByteArrayInputStream bais = new ByteArrayInputStream(bytes);
-            fis.close();
-            dis.close();
-            return bais;
-        } catch (Exception exception) {
-            throw new RuntimeException("Unable to get certificate full streams", exception);
-        }
-    }
-
 }
